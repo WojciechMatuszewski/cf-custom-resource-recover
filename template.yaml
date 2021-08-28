@@ -1,0 +1,72 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+
+Parameters:
+  CustomResourceFunctionName:
+    Type: String
+    Default: custom-resource-function-8
+
+Globals:
+  Function:
+    Timeout: 5
+    Handler: main
+    Runtime: go1.x
+
+Resources:
+  RetryQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      VisibilityTimeout: 60
+      DelaySeconds: 10
+      MessageRetentionPeriod: 3600
+
+  CustomResourceLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${CustomResourceFunctionName}"
+      RetentionInDays: 1
+
+  CustomResourceFunction:
+    Type: AWS::Serverless::Function
+    DependsOn:
+      - CustomResourceLogGroup
+    Properties:
+      FunctionName: !Sub "${CustomResourceFunctionName}"
+      CodeUri: custom-resource
+      Tracing: Active
+      EventInvokeConfig:
+        MaximumEventAgeInSeconds: 60
+        MaximumRetryAttempts: 0
+        DestinationConfig:
+          OnFailure:
+            Type: SQS
+            Destination: !Sub "${RetryQueue.Arn}"
+
+  CustomResource:
+    Type: AWS::CloudFormation::CustomResource
+    Properties:
+      ServiceToken: !Sub "${CustomResourceFunction.Arn}"
+      ShouldFail: false
+
+  CustomResourceRetryFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: custom-resource-fallback
+      Tracing: Active
+      Environment:
+        Variables:
+          FUNCTION_NAME: !Sub "${CustomResourceFunction}"
+      Events:
+        SQSEvent:
+          Type: SQS
+          Properties:
+            Queue: !Sub "${RetryQueue.Arn}"
+            BatchSize: 1
+      Policies:
+        - Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action:
+                - lambda:InvokeFunction
+              Resource:
+                - !Sub "${CustomResourceFunction.Arn}"

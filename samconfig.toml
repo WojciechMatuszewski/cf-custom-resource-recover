@@ -1,0 +1,10 @@
+version = 0.1
+[default]
+[default.deploy]
+[default.deploy.parameters]
+stack_name = "custom-resource-fallback-8"
+s3_bucket = "aws-sam-cli-managed-default-samclisourcebucket-q6pkyd86vwxc"
+s3_prefix = "custom-resource-fallback-8"
+region = "us-east-1"
+capabilities = "CAPABILITY_IAM"
+parameter_overrides = "CustomResourceFunctionName=\"custom-resource-function-8\""
